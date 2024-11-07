@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
-from src._LocalTranscribe import transcribe, get_path
+from src._LocalTranscribe import transcribe
 import customtkinter
 import threading
 from colorama import Back
@@ -20,15 +20,21 @@ class App:
     def __init__(self, master):
         print(Back.CYAN + "Welcome to Local Transcribe with Whisper!\U0001f600\nCheck back here to see some output from your transcriptions.\nDon't worry, they will also be saved on the computer!\U0001f64f")
         self.master = master
+        
         # Change font
         font = ('Roboto', 13, 'bold')  # Change the font and size here
         font_b = ('Roboto', 12)  # Change the font and size here
+        
         # Folder Path
         path_frame = customtkinter.CTkFrame(master)
         path_frame.pack(fill=tk.BOTH, padx=10, pady=10)
         customtkinter.CTkLabel(path_frame, text="Folder:", font=font).pack(side=tk.LEFT, padx=5)
         self.path_entry = customtkinter.CTkEntry(path_frame, width=50, font=font_b)
         self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Set default path
+        default_path = "/Users/marcushamelink/Developer/EPFL/IN-BA3/Computer-Architecture/comp-arch-videos-processors/part-3"
+        self.path_entry.insert(0, default_path)
         customtkinter.CTkButton(path_frame, text="Browse", command=self.browse, font=font).pack(side=tk.LEFT, padx=5)
         # Language frame        
         #thanks to pommicket from Stackoverflow for this fix
@@ -38,6 +44,7 @@ class App:
             if firstclick: # if this is the first time they clicked it
                 firstclick = False
                 self.language_entry.delete(0, "end") # delete all the text in the entry
+        
         language_frame = customtkinter.CTkFrame(master)
         language_frame.pack(fill=tk.BOTH, padx=10, pady=10)
         customtkinter.CTkLabel(language_frame, text="Language:", font=font).pack(side=tk.LEFT, padx=5)
@@ -46,25 +53,31 @@ class App:
         self.language_entry.insert(0, self.default_language_text)
         self.language_entry.bind('<FocusIn>', on_entry_click)
         self.language_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
         # Model frame
-        models = ['base.en', 'base', 'small.en',
-                  'small', 'medium.en', 'medium', 'large']
+        models = ['openai/whisper-tiny', 'openai/whisper-base', 'openai/whisper-small', 'openai/whisper-medium', 'openai/whisper-large-v2']
         model_frame = customtkinter.CTkFrame(master)
         model_frame.pack(fill=tk.BOTH, padx=10, pady=10)
         customtkinter.CTkLabel(model_frame, text="Model:", font=font).pack(side=tk.LEFT, padx=5)
+        
         # ComboBox frame
         self.model_combobox = customtkinter.CTkComboBox(
             model_frame, width=50, state="readonly",
             values=models, font=font_b)
-        self.model_combobox.set(models[1])  # Set the default value
+        self.model_combobox.set(models[3])  # Set the default value
         self.model_combobox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
         # Verbose frame
         verbose_frame = customtkinter.CTkFrame(master)
         verbose_frame.pack(fill=tk.BOTH, padx=10, pady=10)
-        self.verbose_var = tk.BooleanVar()
-        customtkinter.CTkCheckBox(verbose_frame, text="Output transcription to terminal", variable=self.verbose_var, font=font).pack(side=tk.LEFT, padx=5)
+        self.verbose_var = tk.BooleanVar(value=True)  # Set default to True
+        customtkinter.CTkCheckBox(verbose_frame, text="Output transcription to terminal", 
+                                variable=self.verbose_var, 
+                                font=font).pack(side=tk.LEFT, padx=5)
+        
         # Progress Bar
         self.progress_bar = ttk.Progressbar(master, length=200, mode='indeterminate')
+        
         # Button actions frame
         button_frame = customtkinter.CTkFrame(master)
         button_frame.pack(fill=tk.BOTH, padx=10, pady=10)
@@ -96,17 +109,12 @@ class App:
         # Show progress bar
         self.progress_bar.pack(fill=tk.X, padx=5, pady=5)
         self.progress_bar.start()
-        # Setting path and files
-        glob_file = get_path(path)
-        #messagebox.showinfo("Message", "Starting transcription!")
         # Start transcription
         try:
-            output_text = transcribe(path, glob_file, model, language, verbose)
+            output_text = transcribe(path, model, language, verbose)
         except UnboundLocalError:
             messagebox.showinfo("Files not found error!", 'Nothing found, choose another folder.')
             pass
-        except ValueError:
-            messagebox.showinfo("Invalid language name, you might have to clear the default text to continue!")
         # Hide progress bar
         self.progress_bar.stop()
         self.progress_bar.pack_forget()
