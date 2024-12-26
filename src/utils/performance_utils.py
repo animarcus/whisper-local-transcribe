@@ -1,15 +1,16 @@
 # src/utils/performance_utils.py
+from typing import List
 import psutil
 import torch
 import platform
-from colorama import Fore
 import time
 from datetime import datetime
 import wave
 import contextlib
 from moviepy.editor import VideoFileClip
+from src.utils.logging_utils import LogMessage, LogLevel
 
-def get_system_info():
+def get_system_info() -> List[LogMessage]:
     """Get basic system performance statistics"""
     try:
         # CPU Info
@@ -26,17 +27,15 @@ def get_system_info():
             gpu_memory = torch.cuda.memory_allocated(0) / (1024 ** 3)  # Convert to GB
             gpu_info += f" (Using {gpu_memory:.2f} GB)"
             
-        # Format output
-        info = f"""
-{Fore.CYAN}System Performance:
-{Fore.GREEN}CPU Usage: {cpu_percent}%
-RAM Usage: {memory_used_gb:.2f} GB / {memory.total / (1024 ** 3):.2f} GB
-GPU: {gpu_info}
-"""
-        return info
+        return [
+            LogMessage.highlight("System Performance:"),
+            LogMessage.success(f"CPU Usage: {cpu_percent}%"),
+            LogMessage.success(f"RAM Usage: {memory_used_gb:.2f} GB / {memory.total / (1024 ** 3):.2f} GB"),
+            LogMessage.success(f"GPU: {gpu_info}")
+        ]
         
     except Exception as e:
-        return f"Error getting system info: {str(e)}"
+        return [LogMessage.error(f"Error getting system info: {str(e)}")]
 
 def optimize_chunk_size():
     """
@@ -54,19 +53,13 @@ def optimize_chunk_size():
         # - If GPU is available, we can use larger chunks
         
         if torch.backends.mps.is_available() or torch.cuda.is_available():
-            if total_memory_gb < 8:
-                return 20
-            elif total_memory_gb < 16:
-                return 40
-            else:
-                return 60
+            if total_memory_gb < 8: return 20
+            elif total_memory_gb < 16: return 40
+            else: return 60
         else:
-            if total_memory_gb < 8:
-                return 15
-            elif total_memory_gb < 16:
-                return 30
-            else:
-                return 45
+            if total_memory_gb < 8: return 15
+            elif total_memory_gb < 16: return 30
+            else: return 45
                 
     except Exception:
         return 30  # Default safe value
@@ -85,8 +78,21 @@ def get_audio_duration(file_path):
         else:
             return None
     except Exception as e:
-        print(f"Error getting duration: {str(e)}")
         return None
+
+def format_elapsed_time(seconds: float) -> str:
+    """Format elapsed time with appropriate units"""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        remaining_seconds = seconds % 60
+        return f"{int(minutes)}m {int(remaining_seconds)}s"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        remaining_seconds = seconds % 60
+        return f"{int(hours)}h {int(minutes)}m {int(remaining_seconds)}s"
 
 class TranscriptionTimer:
     def __init__(self):
@@ -103,27 +109,38 @@ class TranscriptionTimer:
         self.end_time = time.time()
         self.duration = self.end_time - self.start_time
         
-    def get_performance_stats(self, file_path, chunk_size):
+    def get_elapsed(self) -> float:
+        """Get elapsed time without stopping the timer"""
+        if not self.start_time:
+            return 0.0
+        if self.end_time:
+            return self.duration
+        return time.time() - self.start_time
+    
+    def get_performance_stats(self, file_path: str, chunk_size: int) -> List[LogMessage]:
         """Calculate and format performance statistics"""
         if not self.duration:
-            return "Timer not stopped"
+            return [LogMessage.warning("Timer not stopped")]
             
         audio_duration = get_audio_duration(file_path)
-        # Add debug print
-        print(f"Debug - Audio duration: {audio_duration}, File: {file_path}")
-        
         if audio_duration is None:
-            return f"{Fore.CYAN}Transcription Performance:\n{Fore.GREEN}├─ Processing Time: {self.duration:.2f} seconds"
-            
+            return [LogMessage.detail(f"Processing Time: {self.duration:.2f} seconds")]
+
         realtime_ratio = self.duration / audio_duration
         chunks_processed = audio_duration / chunk_size
         avg_chunk_time = self.duration / chunks_processed
         
-        stats = f"""
-{Fore.CYAN}Transcription Performance:
-{Fore.GREEN}├─ Audio Duration: {audio_duration:.2f} seconds
-├─ Processing Time: {self.duration:.2f} seconds
-├─ Realtime Ratio: {realtime_ratio:.2f}x realtime
-├─ Chunks Processed: {int(chunks_processed)}
-└─ Average Time per Chunk: {avg_chunk_time:.2f} seconds"""
-        return stats
+        return [
+            LogMessage.highlight("📊 Transcription Performance:"),
+            LogMessage.success(f"🎵 Audio Duration: {audio_duration:.2f} seconds"),
+            LogMessage.success(f"⏱️ Processing Time: {self.duration:.2f} seconds"),
+            LogMessage.success(f"🚀 Realtime Ratio: {realtime_ratio:.2f}x realtime"),
+            LogMessage.success(f"📦 Chunks Processed: {int(chunks_processed)}"),
+            LogMessage.success(f"⚡ Average Time per Chunk: {avg_chunk_time:.2f} seconds")
+        ]
+
+
+    def get_debug_info(self, file_path):
+        """Get debug information about the transcription"""
+        audio_duration = get_audio_duration(file_path)
+        return [LogMessage.debug(f"Debug - Audio duration: {audio_duration}, File: {file_path}")]
