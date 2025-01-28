@@ -28,7 +28,7 @@ def main():
     
     # Start transcription
     try:
-        output_text = transcribe(folder_path, args.model, args.language, args.verbose)
+        output_text: str = transcribe(folder_path, args.model, args.language, args.verbose)
         print("Transcription completed successfully.")
         if args.verbose:
             print(output_text)

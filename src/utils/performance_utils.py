@@ -28,10 +28,10 @@ def get_system_info() -> List[LogMessage]:
             gpu_info += f" (Using {gpu_memory:.2f} GB)"
             
         return [
-            LogMessage.highlight("System Performance:"),
-            LogMessage.success(f"CPU Usage: {cpu_percent}%"),
-            LogMessage.success(f"RAM Usage: {memory_used_gb:.2f} GB / {memory.total / (1024 ** 3):.2f} GB"),
-            LogMessage.success(f"GPU: {gpu_info}")
+            LogMessage.header("System Performance:"),
+            LogMessage.stats(f"CPU Usage: {cpu_percent}%"),
+            LogMessage.stats(f"RAM Usage: {memory_used_gb:.2f} GB / {memory.total / (1024 ** 3):.2f} GB"),
+            LogMessage.stats(f"GPU: {gpu_info}")
         ]
         
     except Exception as e:
@@ -124,19 +124,19 @@ class TranscriptionTimer:
             
         audio_duration = get_audio_duration(file_path)
         if audio_duration is None:
-            return [LogMessage.detail(f"Processing Time: {self.duration:.2f} seconds")]
+            return [LogMessage.metric(f"Processing Time: {self.duration:.2f} seconds")]
 
         realtime_ratio = self.duration / audio_duration
         chunks_processed = audio_duration / chunk_size
         avg_chunk_time = self.duration / chunks_processed
         
         return [
-            LogMessage.highlight("📊 Transcription Performance:"),
-            LogMessage.success(f"🎵 Audio Duration: {audio_duration:.2f} seconds"),
-            LogMessage.success(f"⏱️ Processing Time: {self.duration:.2f} seconds"),
-            LogMessage.success(f"🚀 Realtime Ratio: {realtime_ratio:.2f}x realtime"),
-            LogMessage.success(f"📦 Chunks Processed: {int(chunks_processed)}"),
-            LogMessage.success(f"⚡ Average Time per Chunk: {avg_chunk_time:.2f} seconds")
+            LogMessage.header("📊 Transcription Performance:"),
+            LogMessage.metric(f"\tAudio Duration: {audio_duration:.2f} seconds"),
+            LogMessage.metric(f"\tProcessing Time: {self.duration:.2f} seconds"),
+            LogMessage.metric(f"\tRealtime Ratio: {realtime_ratio:.2f}x realtime"),
+            LogMessage.stats(f"\tChunks Processed: {int(chunks_processed)}"),
+            LogMessage.stats(f"\tAverage Time per Chunk: {avg_chunk_time:.2f} seconds")
         ]
 
 

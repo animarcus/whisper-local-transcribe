@@ -1,21 +1,31 @@
-import os
-import torch
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
-from datasets import Audio, Dataset
-from src.utils.file_utils import get_path
-from src.utils.transcription_utils import save_transcription
-from src.utils.performance_utils import TranscriptionTimer, format_elapsed_time, get_system_info, optimize_chunk_size
-from moviepy.editor import VideoFileClip
-import tempfile
-import soundfile as sf
 import datetime
+import os
+import tempfile
+import warnings
+
+import torch
+from datasets import Audio, Dataset
+from moviepy.editor import VideoFileClip
+from transformers import WhisperForConditionalGeneration, WhisperProcessor
+
+from src.utils.file_utils import get_path
 from src.utils.logging_utils import setup_logging
+from src.utils.performance_utils import (
+    TranscriptionTimer,
+    format_elapsed_time,
+    get_system_info,
+    optimize_chunk_size,
+)
+from src.utils.transcription_utils import save_transcription
+
+warnings.filterwarnings("ignore", message="Due to a bug fix in")
+warnings.filterwarnings("ignore", message="Passing a tuple of")
 
 END_OF_TRANSCRIPTION_MARKER = "# END OF TRANSCRIPTION"
 
 
 
-def extract_audio_from_video(video_path):
+def extract_audio_from_video(video_path: str) -> str:
     """Extract audio from video file and save it temporarily"""
     video = VideoFileClip(video_path)
     audio = video.audio
@@ -26,25 +36,27 @@ def extract_audio_from_video(video_path):
         video.close()
         return temp_file.name
 
-def format_timestamp(seconds):
+def format_timestamp(seconds) -> str:
     """Convert seconds to HH:MM:SS format"""
     return str(datetime.timedelta(seconds=round(seconds, 2)))
 
-def format_timestamp_with_minutes(seconds):
+def format_timestamp_with_minutes(seconds) -> str:
     """Convert seconds to 'XmYs (Z seconds)' format"""
     minutes = int(seconds // 60)
     remaining_seconds = round(seconds % 60)
     return f"{minutes}m{remaining_seconds}s ({round(seconds, 2)} seconds)"
 
-def format_chunk_progress(file_num, total_files, title, timestamp_start, timestamp_end, total_duration=None):
+def format_chunk_progress(file_num, total_files, title, timestamp_start, timestamp_end, total_duration=None) -> str:
     """Format the progress string for each chunk"""
     progress = f"[File {file_num}/{total_files}] {title}"
-    progress += f" [{timestamp_start} --> {timestamp_end}]"
+    timestamp = f"[{timestamp_start} --> {timestamp_end}]"
     if total_duration is not None:
-        progress += f" (Total: {format_timestamp(total_duration)})"
-    return progress
+        return f"{progress}\n{timestamp} (Total: {format_timestamp(total_duration)})"
+    return f"{progress}\n{timestamp}"
 
-def transcribe(path, model_name=None, language="en", verbose=False):
+
+
+def transcribe(path, model_name=None, language="en", verbose=False) -> str:
     """
     Transcribes audio files in a specified folder using OpenAI's Whisper model.
     """
@@ -83,24 +95,25 @@ def transcribe(path, model_name=None, language="en", verbose=False):
 
     # Print initial summary
     if verbose:
-        logger.highlight(f"Found {len(glob_file)} files:")
+        logger.header("\n══════════════════════ File Analysis ══════════════════════")
+        logger.metric(f"Found {len(glob_file)} files")
         
         if skipped_files:
-            logger.detail(f"Skipping {len(skipped_files)} already transcribed files:")
+            logger.info(f"\nSkipping {len(skipped_files)} already transcribed files:")
             for skipped_file in skipped_files:
-                logger.warning(f"\t- {skipped_file['title']}")
-        logger.detail(f"{total_files_to_transcribe} Files to transcribe:")
+                logger.warning(f"  ● {skipped_file['title']}")  # Using bullet point for better visual
+        
+        logger.info(f"\n{total_files_to_transcribe} Files to transcribe:")
         for file in files_to_transcribe:
-            logger.primary(f"\t- {file['title']}")
+            logger.primary(f"  ▶ {file['title']}")
 
     if not files_to_transcribe:
         return 'All files have already been transcribed.'
 
     if verbose:
         chunk_length = optimize_chunk_size()
-        logger.highlight("\nSystem Analysis:")
-        logger.detail(f"Using chunk size of {format_timestamp_with_minutes(chunk_length)} based on system configuration")
-        # Print system info after chunk size
+        logger.header("\n══════════════════════ System Analysis ══════════════════════")
+        logger.stats(f"Using chunk size of {format_timestamp_with_minutes(chunk_length)} based on system configuration")
         system_info = get_system_info()
         for message in system_info:
             logger.log(message)
@@ -114,22 +127,23 @@ def transcribe(path, model_name=None, language="en", verbose=False):
         device = torch.device("cpu")
     
     if verbose:
-        logger.highlight("\nInitializing Whisper Model:")
-        logger.detail(f"Loading {model_name or 'default'} model configuration...")
+        logger.header("\n══════════════════════ Model Configuration ══════════════════════")
+        logger.subtle(f"Loading {model_name or 'default'} model configuration...")
+        logger.info(f"Device: {device.type.upper()}")
         if device.type == "mps":
-            logger.detail("Using Apple Silicon GPU acceleration")
+            logger.success("Using Apple Silicon GPU acceleration ✨")
         elif device.type == "cuda":
-            logger.detail(f"Using NVIDIA GPU acceleration: {torch.cuda.get_device_name(0)}")
+            logger.success(f"Using NVIDIA GPU acceleration: {torch.cuda.get_device_name(0)} ✨")
         else:
-            logger.detail("Using CPU for processing")
+            logger.info("Using CPU for processing")
 
     # Load model and processor
     if verbose:
-        logger.detail("Loading Whisper processor...")
+        logger.subtle("Loading Whisper processor...")
     processor = WhisperProcessor.from_pretrained(model_name)
     
     if verbose:
-        logger.detail("Loading Whisper model...")
+        logger.subtle("Loading Whisper model...")
     model = WhisperForConditionalGeneration.from_pretrained(
         model_name,
         use_cache=True,
@@ -137,23 +151,23 @@ def transcribe(path, model_name=None, language="en", verbose=False):
     ).to(device)
     
     if verbose:
-        logger.detail("Configuring model parameters...")
+        logger.subtle("Configuring model parameters...")
     # Set up forced decoder IDs for transcription (not translation)
     if language:
         if verbose:
-            logger.detail(f"Setting up forced transcription for language: {language}")
+            logger.subtle(f"Setting up forced transcription for language: {language}")
         forced_decoder_ids = processor.get_decoder_prompt_ids(language=language, task="transcribe")
         model.config.forced_decoder_ids = forced_decoder_ids
         model.config.suppress_tokens = None
     else:
         if verbose:
-            logger.detail("Setting up language auto-detection")
+            logger.subtle("Setting up language auto-detection")
         forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe")
         model.config.forced_decoder_ids = forced_decoder_ids
 
     if verbose:
-        logger.success("Model initialization complete! ✨")
-        logger.detail("\nStarting transcription process...")
+        logger.subtle("Model initialization complete! ✨")
+        logger.subtle("\nStarting transcription process...")
 
 
     # Define generate function for consistent transcription parameters
@@ -186,13 +200,13 @@ def transcribe(path, model_name=None, language="en", verbose=False):
         file_timer.start()
         
         if verbose:
-            logger.highlight(f"\nStarting transcription of: {title} [{i}/{total_files_to_transcribe}] 🕐")
+            logger.header(f"\nStarting transcription of: {title} [{i}/{total_files_to_transcribe}] 🕐")
         
         try:
             # Handle MP4 files
             if file_path.lower().endswith('.mp4'):
                 if verbose:
-                    logger.detail("Extracting audio from video file...")
+                    logger.subtle("Extracting audio from video file...")
                 audio_file = extract_audio_from_video(file_path)
                 temp_files.append(audio_file)
             else:
@@ -200,12 +214,12 @@ def transcribe(path, model_name=None, language="en", verbose=False):
                 
             # Create dataset with single audio file
             if verbose:
-                logger.detail("Creating audio dataset...")
+                logger.subtle("Creating audio dataset...")
             dataset = Dataset.from_dict({"audio": [audio_file]}).cast_column("audio", Audio(sampling_rate=16000))
             
             # Load audio and preprocess
             if verbose:
-                logger.detail("Processing audio features...")
+                logger.subtle("Processing audio features...")
             audio_data = dataset[0]["audio"]
             input_features = processor(
                 audio_data["array"],
@@ -223,12 +237,12 @@ def transcribe(path, model_name=None, language="en", verbose=False):
             segments = []
             
             if verbose:
-                logger.highlight("\nProcessing Configuration:")
-                logger.success(f"Chunk size: {format_timestamp_with_minutes(chunk_length)}")
-                logger.success(f"Stride length: {format_timestamp_with_minutes(stride_length)}")
-                logger.success(f"Total audio duration: {format_timestamp_with_minutes(total_duration)}")
-                logger.success(f"Expected chunks: {int(total_duration / (chunk_length - stride_length))}")
-                logger.highlight("\nStarting chunk processing:")
+                logger.header("\n══════════════════════ Processing Configuration ══════════════════════")
+                logger.metric(f"Chunk size:          {format_timestamp_with_minutes(chunk_length)}")
+                logger.metric(f"Stride length:       {format_timestamp_with_minutes(stride_length)}")
+                logger.metric(f"Total audio duration: {format_timestamp_with_minutes(total_duration)}")
+                logger.metric(f"Expected chunks:      {int(total_duration / (chunk_length - stride_length))}")
+
             
             logger.detail(f"File duration: {format_timestamp(total_duration)}")
             
@@ -274,8 +288,8 @@ def transcribe(path, model_name=None, language="en", verbose=False):
                         )
                         overall_elapsed = format_elapsed_time(overall_timer.get_elapsed())
                         file_elapsed = format_elapsed_time(file_timer.get_elapsed())
-                        logger.highlight(f"{progress} [Total: {overall_elapsed} | File: {file_elapsed}]")
-                        logger.detail(f"{segment['text']}")
+                        logger.primary(f"\n{progress} \t| Elapsed Time - Total: {overall_elapsed} | File: {file_elapsed}")
+                        logger.detail(f"{segment['text']}\n")
             
             # After processing is complete
             file_timer.stop()
@@ -284,7 +298,7 @@ def transcribe(path, model_name=None, language="en", verbose=False):
             
             if verbose:
                 # Handle performance stats
-                logger.detail("---\nTranscription done!\n---")
+                logger.header("---\nTranscription done!\n---")
                 stats_lines = file_timer.get_performance_stats(file_path, chunk_length)
                 for log_message in stats_lines:
                     logger.log(log_message)
@@ -340,39 +354,39 @@ def transcribe(path, model_name=None, language="en", verbose=False):
                     pass
 
     # Print final summary
-    logger.detail("="*50)
-    logger.highlight("TRANSCRIPTION SUMMARY")
-    logger.detail(f"Total Elapsed Time: {format_elapsed_time(overall_timer.get_elapsed())}")
-    logger.detail("="*50)
+    logger.header("="*50)
+    logger.summary("TRANSCRIPTION SUMMARY")
+    logger.metric(f"Total Elapsed Time: {format_elapsed_time(overall_timer.get_elapsed())}")
+    logger.header("="*50)
 
     # Show successful transcriptions with timing
     successful_transcriptions = [f for f in transcription_summary if f['status'] == 'completed']
     if successful_transcriptions:
-        logger.detail(f"\nSuccessfully Transcribed Files:")
+        logger.header("\nSuccessfully Transcribed Files:")
         for file_info in successful_transcriptions:
             logger.success(f"- {file_info['title']}: {format_timestamp_with_minutes(file_info['duration'])} (Original: {format_timestamp_with_minutes(file_info['original_duration'])}, Ratio: {file_info['transcription_ratio']:.2f})")
 
     # Show skipped files
     if skipped_files:
-        logger.detail(f"Skipped Files (Already Transcribed):")
+        logger.header("Skipped Files (Already Transcribed):")
         for file_info in skipped_files:
             logger.warning(f"- {file_info['title']}")  # Modified to show just the title
 
     # Show failed files
     failed_transcriptions = [f for f in transcription_summary if f['status'] == 'failed']
     if failed_transcriptions:
-        logger.error(f"Failed Transcriptions:")
+        logger.error("Failed Transcriptions:")
         for file_info in failed_transcriptions:
             logger.error(f"- {file_info['title']}: {file_info['error']}")
 
     # Show overall statistics
     total_time = sum(f['duration'] for f in transcription_summary)
-    logger.detail("="*50)
-    logger.highlight(f"Overall Statistics:")
-    logger.detail(f"Total processing time: {format_timestamp_with_minutes(total_time)}")
-    logger.success(f"Successfully transcribed: {len(successful_transcriptions)} files")
-    logger.warning(f"Skipped: {len(skipped_files)} files")
-    logger.error(f"Failed: {len(failed_transcriptions)} files")
-    logger.detail("="*50)
+    logger.header("="*50)
+    logger.summary("Overall Statistics:")
+    logger.metric(f"Total processing time: {format_timestamp_with_minutes(total_time)}")
+    logger.stats(f"Successfully transcribed: {len(successful_transcriptions)} files")
+    logger.stats(f"Skipped: {len(skipped_files)} files")
+    logger.stats(f"Failed: {len(failed_transcriptions)} files")
+    logger.header("="*50)
     
     return 'Transcription process completed.'
