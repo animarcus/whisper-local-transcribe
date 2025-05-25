@@ -1,6 +1,8 @@
 import argparse
-from src._LocalTranscribe import transcribe
 import os
+
+from src._LocalTranscribe import transcribe
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -8,9 +10,17 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("folder", type=str, help="Path to the folder containing video files.")
-    parser.add_argument("--model", type=str, default="openai/whisper-medium", 
-                        choices=['openai/whisper-tiny', 'openai/whisper-base', 'openai/whisper-small', 'openai/whisper-medium', 'openai/whisper-large-v2'],
-                        help="Model to use for transcription.")
+    parser.add_argument("--model", type=str, default="openai/whisper-large-v2", 
+                    choices=[
+                        'openai/whisper-tiny', 
+                        'openai/whisper-base', 
+                        'openai/whisper-small', 
+                        'openai/whisper-medium', 
+                        'openai/whisper-large-v2',
+                        'openai/whisper-large-v3',  # Add latest
+                        'distil-whisper/distil-large-v2'  # Add faster alternative
+                    ],
+                    help="Model to use for transcription.")
     parser.add_argument("--language", type=str, default=None, 
                         help="Language of the audio (or leave empty to auto-detect).")
     parser.add_argument("--verbose", action="store_true", 

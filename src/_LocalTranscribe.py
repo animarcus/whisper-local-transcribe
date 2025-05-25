@@ -121,10 +121,18 @@ def transcribe(path, model_name=None, language="en", verbose=False) -> str:
         chunk_length = 30  # Default value if not verbose
 
     # Check for GPU acceleration
-    if torch.backends.mps.is_available():
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        if verbose:
+            logger.success(f"Using NVIDIA GPU acceleration: {torch.cuda.get_device_name(0)} ✨")
+    elif torch.backends.mps.is_available():
         device = torch.device("mps")
+        if verbose:
+            logger.success("Using Apple Silicon GPU acceleration ✨")
     else:
         device = torch.device("cpu")
+        if verbose:
+            logger.info("Using CPU for processing")
     
     if verbose:
         logger.header("\n══════════════════════ Model Configuration ══════════════════════")
@@ -148,7 +156,18 @@ def transcribe(path, model_name=None, language="en", verbose=False) -> str:
         model_name,
         use_cache=True,
         return_dict=True,
+        torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
+        low_cpu_mem_usage=True,
+        device_map="auto" if device.type == "cuda" else None
     ).to(device)
+    
+    if device.type == "cuda":
+        # Optimize for 8GB VRAM
+        model.half()  # Use float16 for memory efficiency
+        torch.cuda.empty_cache()
+        if verbose:
+            logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB")
+            logger.info("Applied float16 optimization for VRAM efficiency")
     
     if verbose:
         logger.subtle("Configuring model parameters...")
