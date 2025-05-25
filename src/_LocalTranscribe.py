@@ -162,8 +162,7 @@ def transcribe(path, model_name=None, language="en", verbose=False) -> str:
     ).to(device)
     
     if device.type == "cuda":
-        # Optimize for 8GB VRAM
-        model.half()  # Use float16 for memory efficiency
+        # Optimize for 8GB VRAM (Clear memory between files)
         torch.cuda.empty_cache()
         if verbose:
             logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB")
@@ -244,7 +243,7 @@ def transcribe(path, model_name=None, language="en", verbose=False) -> str:
                 audio_data["array"],
                 sampling_rate=audio_data["sampling_rate"],
                 return_tensors="pt"
-            ).input_features.to(device)
+            ).input_features.to(device, dtype=torch.float16 if device.type == "cuda" else torch.float32)
             
             # Create attention mask
             attention_mask = torch.ones_like(input_features)
@@ -274,7 +273,7 @@ def transcribe(path, model_name=None, language="en", verbose=False) -> str:
                     audio_data["array"][chunk_start_sample:chunk_end_sample],
                     sampling_rate=audio_data["sampling_rate"],
                     return_tensors="pt"
-                ).input_features.to(device)
+                ).input_features.to(device, dtype=torch.float16 if device.type == "cuda" else torch.float32)
                 
                 chunk_attention_mask = torch.ones_like(chunk_input)
                 
